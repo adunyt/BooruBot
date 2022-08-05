@@ -9,6 +9,9 @@ namespace MycollegeBot
 {
     public class Handlers
     {
+        async public Task CommandHandler(Message message)
+        {
+        }
 
         async public Task SendErrorMessageToUserAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
