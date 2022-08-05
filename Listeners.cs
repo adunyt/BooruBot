@@ -2,7 +2,7 @@
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
-namespace MycollegeBot
+namespace HentaiBot
 {
     public class Listeners
     {
@@ -19,11 +19,14 @@ namespace MycollegeBot
         }
         async public Task MainListener(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
-            Console.WriteLine($"Получено обновление, типа - {update.Type}");
+            Console.WriteLine($"Получено обновление, тип - {update.Type}");
             MessageTypes messageType;
             if (update.Type is UpdateType.Message && update.Message?.Text is not null)
             {
                 var message = update.Message;
+                Console.WriteLine($"\tId чата - {message.Chat.Id}," +
+                    $"\n\tЮзернейм - {message.Chat.Username ?? "Отстуствует"}" +
+                    $"\n\tИмя фамилия пользователя - {message.Chat.FirstName ?? "Отстуствует"} {message.Chat.LastName ?? "Отстуствует"}");
                 if (message.Text.StartsWith("/") && message.EntityValues is not null && message.Entities[0].Type is MessageEntityType.BotCommand)
                 {
                     messageType = MessageTypes.command;
@@ -40,7 +43,6 @@ namespace MycollegeBot
                 messageType = MessageTypes.other;
                 //await Router.RouteOther(update);
             }
-            Console.WriteLine($"\t Тип сообщения: {messageType}");
         }
     }
 }
