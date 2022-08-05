@@ -1,16 +1,18 @@
 ﻿using Telegram.Bot;
-using Telegram.Bot.Exceptions;
-using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.ReplyMarkups;
 
 namespace MycollegeBot
 {
     public class Listeners
     {
-        Router router = new Router();
-        enum MessageTypes { 
+        Router router;
+        public Listeners(Router rt)
+        {
+            router = rt;
+        }
+        enum MessageTypes
+        {
             command,
             text,
             other
@@ -25,18 +27,18 @@ namespace MycollegeBot
                 if (message.Text.StartsWith("/") && message.EntityValues is not null && message.Entities[0].Type is MessageEntityType.BotCommand)
                 {
                     messageType = MessageTypes.command;
-                    await router.RouteCommand(update);
+                    await router.RouteCommand(update, cancellationToken);
                 }
                 else
                 {
                     messageType = MessageTypes.text;
-                    await Router.RouteText(update.Message);
+                    //await Router.RouteText(update.Message);
                 }
             }
             else
             {
                 messageType = MessageTypes.other;
-                await Router.RouteOther(update);
+                //await Router.RouteOther(update);
             }
             Console.WriteLine($"\t Тип сообщения: {messageType}");
         }

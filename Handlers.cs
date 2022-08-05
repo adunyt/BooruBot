@@ -1,16 +1,25 @@
 ﻿using Telegram.Bot;
 using Telegram.Bot.Exceptions;
-using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.ReplyMarkups;
 
 namespace MycollegeBot
 {
     public class Handlers
     {
-        async public Task CommandHandler(Message message)
+        TelegramBotClient botClient;
+        public Handlers(Router router, TelegramBotClient currentBotClient)
         {
+            botClient = currentBotClient;
+            router.routes.Add("/start", new Router.Handler(StartHandler));
+        }
+
+        async public Task StartHandler(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs)
+        {
+
+            Message sentMessage = await botClient.SendTextMessageAsync(
+                chatId: chatId,
+                text: "Ну здарова",
+                cancellationToken: cancellationToken);
         }
 
         async public Task SendErrorMessageToUserAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)

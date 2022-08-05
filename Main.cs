@@ -1,16 +1,14 @@
 ﻿using Telegram.Bot;
-using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
-using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.ReplyMarkups;
 using MycollegeBot;
 
 using var cancelSource = new CancellationTokenSource();
 var botClient = new TelegramBotClient("5473922129:AAG5oD6OqnVUfR18hNmPMx_U1-WulrYMy-8");
 var filter = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>() };
-var handlers = new Handlers();
-var listeners = new Listeners();
+var router = new Router();
+var handlers = new Handlers(router, botClient);
+var listeners = new Listeners(router);
 
 botClient.StartReceiving(
     updateHandler: listeners.MainListener,
