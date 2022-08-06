@@ -1,7 +1,6 @@
-﻿using Telegram.Bot;
-using Telegram.Bot.Exceptions;
+﻿using HentaiBot.Image;
+using Telegram.Bot;
 using Telegram.Bot.Types;
-using HentaiBot.Image;
 
 namespace HentaiBot
 {
@@ -88,31 +87,8 @@ namespace HentaiBot
                 cancellationToken: cancellationToken);
         }
 
-        //async public Task SendErrorMessageToUserAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
-        //{
-        //    if (update.Message is null)
-        //    {
-        //        await HandlePollingErrorAsync(botClient, new Exception("Сообщение ничего не содержит, невозможно ответить"), cancellationToken);
-        //        return;
-        //    }
-        //    Message sentMessage = await botClient.SendTextMessageAsync(
-        //        chatId: update.Message.Chat.Id,
-        //        text: "Произошла попытка при выполнении запроса, повторите попытку ☹️",
-        //        replyToMessageId: update.Message.MessageId,
-        //        cancellationToken: cancellationToken);
-        //}
-
         public Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
         {
-            //var ErrorMessage = exception switch
-            //{
-            //    ApiRequestException apiRequestException
-            //        => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
-            //    _ => exception.ToString()
-            //};
-
-            //Console.WriteLine($"\nПроизошла критическая ошибка во время работы бота" +
-            //    $"\t\nОписание: {ErrorMessage}");
             return Task.CompletedTask;
         }
     }

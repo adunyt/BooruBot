@@ -14,10 +14,10 @@ namespace HentaiBot
 
         async public Task RouteCommand(Update update, CancellationToken cancellationToken)
         {
-            var message = update.Message;
+            Message message = update.Message;
             var command = message.Text.Substring(message.Entities[0].Offset, message.Entities[0].Length);
             logger.Debug("Команда: {command}", command);
-            Handler handler = routes.GetValueOrDefault(command);
+            var handler = routes.GetValueOrDefault(command);
             if (handler is null && noCommandHandler is not null)
             {
                 await noCommandHandler(update.Message.Chat.Id, message.MessageId, command, cancellationToken);

@@ -1,6 +1,4 @@
-﻿using BooruSharp;
-
-namespace HentaiBot.Image
+﻿namespace HentaiBot.Image
 {
     static public class ImageFinder
     {
@@ -24,7 +22,7 @@ namespace HentaiBot.Image
                     query += "rating:explicit";
                     break;
             }
-            var result = await booru.GetRandomPostAsync(query + String.Join(", ", tags ?? new string[] {"*"}));
+            var result = await booru.GetRandomPostAsync(query + String.Join(", ", tags ?? new string[] { "*" }));
             logger.Debug("Post URL: {postUri}\tРейтинг: {rating}\tТеги: {tags}",
                       result.PostUrl?.AbsoluteUri ?? "null", result.Rating.ToString(), String.Join(", ", result.Tags));
 

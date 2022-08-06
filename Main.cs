@@ -1,54 +1,107 @@
-﻿using Telegram.Bot;
-using Telegram.Bot.Extensions.Polling;
-using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Exceptions;
+﻿using HentaiBot;
 using NLog;
-using HentaiBot;
+using Telegram.Bot;
+using Telegram.Bot.Exceptions;
+using Telegram.Bot.Extensions.Polling;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 
 #region LoggerInit
 var config = new NLog.Config.LoggingConfiguration();
-var logfile = new NLog.Targets.FileTarget("logfile") { FileName = $"log-{DateTime.Now}.txt" };
+var logfile = new NLog.Targets.FileTarget("logfile") { FileName = $"logs/log-{DateTime.Now}.txt" };
 var logconsole = new NLog.Targets.ConsoleTarget("logconsole");
 config.AddRule(LogLevel.Debug, LogLevel.Fatal, logconsole);
 config.AddRule(LogLevel.Debug, LogLevel.Fatal, logfile);
 LogManager.Configuration = config;
 Logger logger = LogManager.GetCurrentClassLogger();
+logger.Debug("Иницилизация логгера - успешно");
 #endregion
 
-using var cancelSource = new CancellationTokenSource();
+/* TODO:
+ * определение, что бота добавили в группу (MyChatMember)
+ * сделать файл с хранением пользователя - групп (XmlSerializer)
+ * сделать файл группа - предпочтения, такие как blacklist, теги, boorus, рейтинг (XmlSerializer)
+ * починить экстренную остановку (CancelKeyPress)
+ * сообщение о сбоях (HandlePollingErrorAsync)
+*/
+
+#region BotInit
 var botClient = new TelegramBotClient("5473922129:AAG5oD6OqnVUfR18hNmPMx_U1-WulrYMy-8");
-var filter = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>()};
+var filter = new ReceiverOptions { AllowedUpdates = new UpdateType[2] { UpdateType.Message, UpdateType.MyChatMember } };
 var router = new Router();
 var handlers = new Handlers(router, botClient, logger);
 router.noCommandHandler = new Router.Handler(handlers.NoCommandError);
 router.logger = logger;
 var listeners = new Listeners(router, logger);
 logger.Debug("Иницилизация бота - успешно");
+#endregion
 
-//var commands = new List<BotCommand>();
-//commands.Add(new BotCommand { Command = "/start", Description = "Начать общение с ботом" });
-//commands.Add(new BotCommand { Command = "/random_image", Description = "Случайный рисунок" });
-//commands.Add(new BotCommand { Command = "/help", Description = "Попросить помощи у бота" });
-//botClient.SetMyCommandsAsync(commands);
+using var cancelSource = new CancellationTokenSource();
 
 bool shuttingDown = false;
-Console.CancelKeyPress += (sender, e) => 
+bool botRunning = false;
+Console.CancelKeyPress += (sender, e) =>
     {
         shuttingDown = true;
-        cancelSource.Cancel();
-        logger.Info("Остановка бота...");
-        e.Cancel = true;
+        if (botRunning)
+        {
+            logger.Info("Остановка приложения и бота...");
+            cancelSource.Cancel();
+            e.Cancel = true;
+        }
+        else
+        {
+            logger.Info("Остановка приложения...");
+            e.Cancel = false;
+        }
     };
 
-while (true && !shuttingDown) // main cycle
+int unknownErrorCount = 0;
+while (!shuttingDown) // main cycle
 {
+    botRunning = false;
     Thread.Sleep(500); // some thread sleeping for except frequently repeated requests on errors
     int apiErrorCount = 0;
     var botCancelToken = cancelSource.Token;
     try
     {
+        #region Some tests
+        var testConnection = new TestConnetion();
+        logger.Debug("Проверка соединения с сайтами");
+        if (await testConnection.TestBoorusAsync())
+        {
+            string servicesWithError = "";
+            foreach (var booru in testConnection.Results)
+            {
+                servicesWithError += booru.ToString() + ", ";
+            }
+            if (testConnection.Results.Count == testConnection.ServicesWithError.Count)
+            {
+                throw new HttpRequestException($"Невозможно соеденится со всеми сервисами: {servicesWithError}");
+            }
+            else
+            {
+                UserAnswer userAnswer = AskYesNoForce($"Невозможно соеденится с одним или несколькими сервисами: {servicesWithError}. Y/N/F ");
+                if (userAnswer == UserAnswer.Yes)
+                {
+                    continue;
+                }
+                else if (userAnswer == UserAnswer.No)
+                {
+                    break;
+                }
+            }
+        }
+        logger.Debug("Проверка токена бота");
+        if (!await botClient.TestApiAsync())
+        {
+            throw new ArgumentException("Bot token is invalid");
+        }
         botCancelToken.ThrowIfCancellationRequested();
-        logger.Info("Запуск бота @{botName}. Чтобы остановить нажмите Ctrl+C", botClient.GetMeAsync().Result.Username, botCancelToken.IsCancellationRequested);
+        #endregion
+
+        logger.Info("Запуск бота @{botName}. Чтобы остановить нажмите Ctrl+C", botClient.GetMeAsync().Result.Username);
+        botRunning = true;
         await botClient.ReceiveAsync(
             updateHandler: listeners.MainListener,
             errorHandler: handlers.HandlePollingErrorAsync,
@@ -56,6 +109,7 @@ while (true && !shuttingDown) // main cycle
             cancellationToken: botCancelToken
         );
     }
+    #region Error Catching
     catch (ApiRequestException e)
     {
         if (apiErrorCount < 6)
@@ -66,11 +120,7 @@ while (true && !shuttingDown) // main cycle
         else
         {
             logger.Fatal(e, "Ошибка со стороны телеграмма повторилась более чем 5 раз: {apiError}");
-            if (askYesOrNo("Ошибка повторилась более чем 5 раз, приостановка программы до ввода пользователя.\nПерезапустить бота? Y/N "))
-            {
-                continue;
-            }
-            else
+            if (!AskYesOrNo("Ошибка повторилась более чем 5 раз, приостановка программы до ввода пользователя.\nПерезапустить бота? Y/N "))
             {
                 break;
             }
@@ -79,11 +129,7 @@ while (true && !shuttingDown) // main cycle
     catch (HttpRequestException e)
     {
         logger.Fatal(e, "Возникла ошибка при отправке запроса на сервер");
-        if (askYesOrNo($"\nПерезапустить бота? Y/N "))
-        {
-            continue;
-        }
-        else
+        if (!AskYesOrNo($"\nПерезапустить бота? Y/N "))
         {
             break;
         }
@@ -91,32 +137,39 @@ while (true && !shuttingDown) // main cycle
     catch (OperationCanceledException e)
     {
         logger.Fatal(e, "Задача отменена до начала ее выполнения");
-        if (askYesOrNo($"\nПерезапустить бота? Y/N "))
-        {
-            continue;
-        }
-        else
+        if (!AskYesOrNo($"\nПерезапустить бота? Y/N "))
         {
             break;
         }
     }
     catch (Exception e)
     {
-        logger.Error(e, "Возникла непредвиденная ошибка");
+        unknownErrorCount++;
+        if (unknownErrorCount < 4)
+        {
+            logger.Error(e, "Возникла непредвиденная ошибка");
+        }
+        else
+        {
+            logger.Fatal(e, "Непредвиденная ошибка возникла более трех раз, приостановка выполнения");
+            if (!AskYesOrNo($"\nПерезапустить бота? Y/N "))
+            {
+                break;
+            }
+        }
     }
-    finally
-    {
-        logger.Info("Попытка перезапуска бота...");
-    }
-}
+    #endregion
 
+    logger.Info("Попытка перезапуска бота...");
+}
+Exit();
 
 /// <summary>
 /// Asking user for exit until gets it
 /// </summary>
 /// <param name="message">Message to user</param>
 /// <returns>Return true when user want to exit, false when doesn't</returns>
-bool askYesOrNo(string message)
+bool AskYesOrNo(string message)
 {
     Console.Write(message);
     string userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
@@ -138,5 +191,68 @@ bool askYesOrNo(string message)
         return false;
     }
 }
-cancelSource.Cancel();
-logger.Info("Остановка бота по желанию пользователя...");
+
+/// <summary>
+/// Asking user for Yes No or Force
+/// </summary>
+/// <param name="message">Message to user</param>
+/// <returns>Return one of UserAnswer</returns>
+UserAnswer AskYesNoForce(string message)
+{
+    Console.Write(message);
+    string userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
+    Console.WriteLine();
+    while (!(userAnswer == "y" || userAnswer == "n" || userAnswer == "f"))
+    {
+        Console.Write("Введите Y/N/F ");
+        userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
+        Console.WriteLine();
+    }
+    if (userAnswer == "y")
+    {
+        logger.Debug(@"Пользователь согласился");
+        return UserAnswer.Yes;
+    }
+    else if (userAnswer == "n")
+    {
+        logger.Debug(@"Пользователь отказал");
+        return UserAnswer.No;
+    }
+    else
+    {
+        logger.Debug(@"Пользователь принудительно решил запустить");
+        return UserAnswer.Force;
+    }
+}
+
+/// <summary>
+/// Upload displayed in chat bot commands to Telegram
+/// </summary>
+void UpdateCommands(TelegramBotClient bot)
+{
+    var commands = new List<BotCommand>
+    {
+        new BotCommand { Command = "/start", Description = "Начать общение с ботом" },
+        new BotCommand { Command = "/random_image", Description = "Случайный рисунок" },
+        new BotCommand { Command = "/help", Description = "Попросить помощи у бота" }
+    };
+
+    bot.SetMyCommandsAsync(commands);
+}
+
+void Exit()
+{
+    if (!shuttingDown)
+    {
+        cancelSource.Cancel();
+    }
+    LogManager.Shutdown();
+    logger.Info("Остановка бота по желанию пользователя...");
+}
+
+enum UserAnswer
+{
+    Yes,
+    No,
+    Force
+}
