@@ -8,13 +8,15 @@ namespace HentaiBot
     public class Handlers
     {
         TelegramBotClient botClient;
-        public Handlers(Router router, TelegramBotClient currentBotClient)
+        NLog.Logger logger;
+        public Handlers(Router router, TelegramBotClient currentBotClient, NLog.Logger _logger)
         {
+            logger = _logger;
             botClient = currentBotClient;
             router.routes.Add("/start", new Router.Handler(StartHandler));
             router.routes.Add("/help", new Router.Handler(HelpHandler));
             router.routes.Add("/random_image", new Router.Handler(GetImageHandler));
-            router.routes.Add("/crash", new Router.Handler(CrashHandler));
+            router.routes.Add("/crash", new Router.Handler(NoCommandError));
 
         }
 
@@ -35,7 +37,7 @@ namespace HentaiBot
 
             try
             {
-                var result = await ImageFinder.Gelbooru();
+                var result = await ImageFinder.Gelbooru(logger);
                 var link = result.Item1;
                 var postUri = result.Item2;
                 var tags = result.Item3;
@@ -72,8 +74,10 @@ namespace HentaiBot
             }
             await botClient.SendPhotoAsync(
                 chatId: chatId,
+                caption: "Force crash",
                 photo: "https://i.pinimg.com/originals/96/a4/6c/96a46c2fc626033df7322dce0eae9497.jpg",
                 cancellationToken: cancellationToken);
+            throw new Exception("Force Crash");
         }
 
         async public Task NoCommandError(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs)

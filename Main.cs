@@ -2,15 +2,28 @@
 using Telegram.Bot.Extensions.Polling;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Exceptions;
+using NLog;
 using HentaiBot;
+
+#region LoggerInit
+var config = new NLog.Config.LoggingConfiguration();
+var logfile = new NLog.Targets.FileTarget("logfile") { FileName = $"log-{DateTime.Now}.txt" };
+var logconsole = new NLog.Targets.ConsoleTarget("logconsole");
+config.AddRule(LogLevel.Debug, LogLevel.Fatal, logconsole);
+config.AddRule(LogLevel.Debug, LogLevel.Fatal, logfile);
+LogManager.Configuration = config;
+Logger logger = LogManager.GetCurrentClassLogger();
+#endregion
 
 using var cancelSource = new CancellationTokenSource();
 var botClient = new TelegramBotClient("5473922129:AAG5oD6OqnVUfR18hNmPMx_U1-WulrYMy-8");
 var filter = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>()};
 var router = new Router();
-var handlers = new Handlers(router, botClient);
+var handlers = new Handlers(router, botClient, logger);
 router.noCommandHandler = new Router.Handler(handlers.NoCommandError);
-var listeners = new Listeners(router);
+router.logger = logger;
+var listeners = new Listeners(router, logger);
+logger.Debug("Иницилизация бота - успешно");
 
 //var commands = new List<BotCommand>();
 //commands.Add(new BotCommand { Command = "/start", Description = "Начать общение с ботом" });
@@ -23,59 +36,77 @@ Console.CancelKeyPress += (sender, e) =>
     {
         shuttingDown = true;
         cancelSource.Cancel();
-        Console.WriteLine("Остановка бота...");
+        logger.Info("Остановка бота...");
         e.Cancel = true;
     };
 
-while (true && !shuttingDown)
+while (true && !shuttingDown) // main cycle
 {
-    Console.WriteLine($"Запуск бота @{botClient.GetMeAsync().Result.Username}\nЧтобы остановить нажмите Ctrl+C");
     Thread.Sleep(500); // some thread sleeping for except frequently repeated requests on errors
     int apiErrorCount = 0;
+    var botCancelToken = cancelSource.Token;
     try
     {
+        botCancelToken.ThrowIfCancellationRequested();
+        logger.Info("Запуск бота @{botName}. Чтобы остановить нажмите Ctrl+C", botClient.GetMeAsync().Result.Username, botCancelToken.IsCancellationRequested);
         await botClient.ReceiveAsync(
             updateHandler: listeners.MainListener,
             errorHandler: handlers.HandlePollingErrorAsync,
             receiverOptions: filter,
-            cancellationToken: cancelSource.Token
+            cancellationToken: botCancelToken
         );
     }
     catch (ApiRequestException e)
     {
-        cancelSource.Cancel();
         if (apiErrorCount < 6)
         {
             apiErrorCount++;
-            Console.WriteLine($"Возникла со стороны телеграмма ошибка: {e}");
+            logger.Error(e, "Возникла со стороны телеграмма ошибка: {apiError}");
         }
         else
         {
-            if (askForExit("Ошибка повторилась более чем 5 раз, приостановка программы до ввода пользователя.\nПерезапустить бота? Y/N "))
+            logger.Fatal(e, "Ошибка со стороны телеграмма повторилась более чем 5 раз: {apiError}");
+            if (askYesOrNo("Ошибка повторилась более чем 5 раз, приостановка программы до ввода пользователя.\nПерезапустить бота? Y/N "))
             {
-                break;
+                continue;
             }
             else
             {
-                continue;
+                break;
             }
         }
     }
     catch (HttpRequestException e)
     {
-        if (askForExit($"Возникла ошибка при отправке запроса на сервер.\n{e}\nПерезапустить бота? Y/N "))
+        logger.Fatal(e, "Возникла ошибка при отправке запроса на сервер");
+        if (askYesOrNo($"\nПерезапустить бота? Y/N "))
         {
-            break;
+            continue;
         }
         else
         {
+            break;
+        }
+    }
+    catch (OperationCanceledException e)
+    {
+        logger.Fatal(e, "Задача отменена до начала ее выполнения");
+        if (askYesOrNo($"\nПерезапустить бота? Y/N "))
+        {
             continue;
+        }
+        else
+        {
+            break;
         }
     }
     catch (Exception e)
     {
-        cancelSource.Cancel();
-        Console.WriteLine($"Возникла ошибка: {e}");
+        logger.Error(e, "Возникла непредвиденная ошибка");
+    }
+    finally
+    {
+        logger.Info("Попытка перезапуска бота...");
     }
 }
 
@@ -85,7 +116,7 @@ while (true && !shuttingDown)
 /// </summary>
 /// <param name="message">Message to user</param>
 /// <returns>Return true when user want to exit, false when doesn't</returns>
-bool askForExit(string message)
+bool askYesOrNo(string message)
 {
     Console.Write(message);
     string userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
@@ -98,13 +129,14 @@ bool askForExit(string message)
     }
     if (userAnswer == "y")
     {
-        Console.WriteLine("\nПерезагрузка...\n");
-        return false;
+        logger.Debug(@"Пользователь согласился. Сообщение - '{message}'", message);
+        return true;
     }
     else
     {
-        return true;
+        logger.Debug(@"Пользователь отказал. Сообщение - '{message}'", message);
+        return false;
     }
 }
-
-Console.WriteLine("Остановка бота по желанию пользователя...");
+cancelSource.Cancel();
+logger.Info("Остановка бота по желанию пользователя...");

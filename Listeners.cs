@@ -7,8 +7,10 @@ namespace HentaiBot
     public class Listeners
     {
         Router router;
-        public Listeners(Router rt)
+        NLog.Logger logger;
+        public Listeners(Router rt, NLog.Logger _logger)
         {
+            logger = _logger;
             router = rt;
         }
         enum MessageTypes
@@ -19,14 +21,15 @@ namespace HentaiBot
         }
         async public Task MainListener(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
-            Console.WriteLine($"Получено обновление, тип - {update.Type}");
+            logger.Debug($"Получено обновление, тип - {update.Type}");
             MessageTypes messageType;
             if (update.Type is UpdateType.Message && update.Message?.Text is not null)
             {
                 var message = update.Message;
-                Console.WriteLine($"\tId чата - {message.Chat.Id}," +
-                    $"\n\tЮзернейм - {message.Chat.Username ?? "Отстуствует"}" +
-                    $"\n\tИмя фамилия пользователя - {message.Chat.FirstName ?? "Отстуствует"} {message.Chat.LastName ?? "Отстуствует"}");
+                logger.Debug("Id чата - {chatId}," +
+                    " Юзернейм - {username}" +
+                    " Имя фамилия пользователя - {firstName} {lastName}",
+                    message.Chat.Id, message.Chat.Username ?? "Отстуствует", message.Chat.FirstName ?? "Отстуствует", message.Chat.LastName ?? "Отстуствует");
                 if (message.Text.StartsWith("/") && message.EntityValues is not null && message.Entities[0].Type is MessageEntityType.BotCommand)
                 {
                     messageType = MessageTypes.command;
