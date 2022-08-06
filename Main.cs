@@ -29,11 +29,11 @@ Console.CancelKeyPress += (sender, e) =>
 
 while (true && !shuttingDown)
 {
+    Console.WriteLine($"Запуск бота @{botClient.GetMeAsync().Result.Username}\nЧтобы остановить нажмите Ctrl+C");
     Thread.Sleep(500); // some thread sleeping for except frequently repeated requests on errors
     int apiErrorCount = 0;
     try
     {
-        Console.WriteLine($"Запуск бота @{botClient.GetMeAsync().Result.Username}\nЧтобы остановить нажмите Ctrl+C");
         await botClient.ReceiveAsync(
             updateHandler: listeners.MainListener,
             errorHandler: handlers.HandlePollingErrorAsync,
@@ -51,28 +51,59 @@ while (true && !shuttingDown)
         }
         else
         {
-            Console.WriteLine("Ошибка повторилась более чем 5 раз, приостановка программы до ввода пользователя. Перезапустить бота? Y/N ");
-            var userAnswer = Console.Read().ToString().ToLower();
-            while (userAnswer != "y" || userAnswer != "n")
-            {
-                Console.WriteLine("Введите Y/N ");
-                userAnswer = Console.Read().ToString().ToLower();
-            }
-            if (userAnswer == "y")
-            {
-                Console.WriteLine("\nПерезагрузка...\n");
-                continue;
-            }
-            else if (userAnswer == "n")
+            if (askForExit("Ошибка повторилась более чем 5 раз, приостановка программы до ввода пользователя.\nПерезапустить бота? Y/N "))
             {
                 break;
             }
+            else
+            {
+                continue;
+            }
+        }
+    }
+    catch (HttpRequestException e)
+    {
+        if (askForExit($"Возникла ошибка при отправке запроса на сервер.\n{e}\nПерезапустить бота? Y/N "))
+        {
+            break;
+        }
+        else
+        {
+            continue;
         }
     }
     catch (Exception e)
     {
         cancelSource.Cancel();
         Console.WriteLine($"Возникла ошибка: {e}");
+    }
+}
+
+
+/// <summary>
+/// Asking user for exit until gets it
+/// </summary>
+/// <param name="message">Message to user</param>
+/// <returns>Return true when user want to exit, false when doesn't</returns>
+bool askForExit(string message)
+{
+    Console.Write(message);
+    string userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
+    Console.WriteLine();
+    while (!(userAnswer == "y" || userAnswer == "n"))
+    {
+        Console.Write("Введите Y/N ");
+        userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
+        Console.WriteLine();
+    }
+    if (userAnswer == "y")
+    {
+        Console.WriteLine("\nПерезагрузка...\n");
+        return false;
+    }
+    else
+    {
+        return true;
     }
 }
 
