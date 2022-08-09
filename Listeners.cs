@@ -4,14 +4,14 @@ using Telegram.Bot.Types.Enums;
 
 namespace HentaiBot
 {
-    public class Listeners
+    internal class Listeners
     {
-        Router router;
-        NLog.Logger logger;
-        public Listeners(Router rt, NLog.Logger _logger)
+        private readonly NLog.Logger logger;
+        private Router router;
+        public Listeners(Router router, NLog.Logger logger)
         {
-            logger = _logger;
-            router = rt;
+            this.logger = logger;
+            this.router = router;
         }
         async public Task MainListener(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
@@ -27,14 +27,10 @@ namespace HentaiBot
                 {
                     await router.RouteCommand(update, cancellationToken);
                 }
-                else
-                {
-                    //await Router.RouteText(update.Message);
-                }
             }
-            else
+            else if (update.Type == UpdateType.MyChatMember)
             {
-                //await Router.RouteOther(update);
+                await router.RouteMembership(update, cancellationToken);
             }
         }
     }

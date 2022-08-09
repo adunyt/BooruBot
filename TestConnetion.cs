@@ -2,28 +2,8 @@
 
 namespace HentaiBot
 {
-    public class TestResult
-    {
-        public bool Success { get; private set; }
-        public Uri Uri { get; private set; }
-        public Exception? ConnectException { get; private set; }
 
-        public TestResult(bool success, Uri uri, Exception? exception)
-        {
-            Success = success;
-            Uri = uri;
-            ConnectException = exception;
-        }
-
-        public override string? ToString()
-        {
-            var avalible = (Success) ? "доступен" : "недоступен";
-            var hasException = (ConnectException is not null) ? $" с ошибкой {ConnectException.Message}" : "";
-            return $"{Uri.Host} {avalible}{hasException}";
-        }
-    }
-
-    public class TestConnetion
+    internal class TestConnetion
     {
         public List<TestResult> Results { get; private set; } = new List<TestResult>();
         public List<TestResult> ServicesWithError { get; private set; } = new List<TestResult>();
@@ -36,10 +16,12 @@ namespace HentaiBot
         {
             bool hasException = false;
 
-            var boorus = new List<ABooru>();
-            boorus.Add(new DanbooruDonmai());
-            boorus.Add(new Gelbooru());
-            boorus.Add(new Konachan());
+            var boorus = new List<ABooru>
+            {
+                new DanbooruDonmai(),
+                new Gelbooru(),
+                //new Konachan()
+            };
 
             foreach (var booru in boorus)
             {

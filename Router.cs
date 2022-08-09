@@ -2,33 +2,39 @@
 
 namespace HentaiBot
 {
-    public class Router
+    internal class Router
     {
-        public Handler noCommandHandler;
+        public Router(NLog.Logger logger)
+        {
+            this.logger = logger;
+        }
 
-        public NLog.Logger logger;
+        private readonly NLog.Logger logger;
 
-        public delegate Task Handler(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs);
+        public Dictionary<string, MessageHandler> commandRoutes = new();
 
-        public Dictionary<string, Handler> routes = new();
+        public Dictionary<string, UpdateHandler> memberRoutes = new();
 
         async public Task RouteCommand(Update update, CancellationToken cancellationToken)
         {
             Message message = update.Message;
             var command = message.Text.Substring(message.Entities[0].Offset, message.Entities[0].Length);
             logger.Debug("Команда: {command}", command);
-            var handler = routes.GetValueOrDefault(command);
-            if (handler is null && noCommandHandler is not null)
+            var handler = commandRoutes.GetValueOrDefault(command) ?? commandRoutes.GetValueOrDefault("unknown"); //если не найден handler для обработки команды, попытка достать специальный для этого handler
+            try
             {
-                await noCommandHandler(update.Message.Chat.Id, message.MessageId, command, cancellationToken);
-                return;
+                await handler(message.Chat.Id, message.MessageId, command, cancellationToken);
             }
-            else if (handler is null)
+            catch (NullReferenceException)
             {
-                logger.Warn("Не возможно обработать команду {command}", command);
-                return;
+                logger.Warn("Не опредлен обработчик команды! {command}", command);
             }
-            await handler(update.Message.Chat.Id, message.MessageId, command, cancellationToken);
         }
+        async public Task RouteMembership(Update update, CancellationToken cancellationToken)
+        {
+            var handler = memberRoutes.GetValueOrDefault("me");
+            await handler(update, cancellationToken);
+        }
+
     }
 }

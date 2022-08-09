@@ -1,38 +1,44 @@
-﻿namespace HentaiBot.Image
+﻿using BooruSharp.Booru;
+using BooruSharp.Search.Post;
+
+namespace HentaiBot.Image
 {
-    static public class ImageFinder
+    static internal class ImageFinder
     {
-        async static public Task<(string, string, string[])> Gelbooru(NLog.Logger logger, string[]? tags = null, BooruSharp.Search.Post.Rating rating = BooruSharp.Search.Post.Rating.Explicit)
+        async static public Task<(string, string, string[])> Abooru(ABooru booru, NLog.Logger logger, List<string>? tags = null, Rating rating = Rating.General)
         {
-            logger.Info("Поиск случайного изображения на Gelbooru");
-            var booru = new BooruSharp.Booru.DanbooruDonmai();
-            string query = "";
+            logger.Info("Поиск случайного изображения на {booru}", booru.BaseUrl.Host);
+            tags ??= new();
+            SearchResult result;
             switch (rating)
             {
-                case BooruSharp.Search.Post.Rating.General:
-                    query += "rating:general";
+                case Rating.General:
+                    tags.Add("rating:general");
                     break;
-                case BooruSharp.Search.Post.Rating.Safe:
-                    query += "rating:safe";
+                case Rating.Safe:
+                    tags.Add("rating:safe");
                     break;
-                case BooruSharp.Search.Post.Rating.Questionable:
-                    query += "rating:questionable";
+                case Rating.Questionable:
+                    tags.Add("rating:questionable");
                     break;
-                case BooruSharp.Search.Post.Rating.Explicit:
-                    query += "rating:explicit";
+                case Rating.Explicit:
+                    tags.Add("rating:explicit");
                     break;
             }
-            var result = await booru.GetRandomPostAsync(query + String.Join(", ", tags ?? new string[] { "*" }));
-            logger.Debug("Post URL: {postUri}\tРейтинг: {rating}\tТеги: {tags}",
-                      result.PostUrl?.AbsoluteUri ?? "null", result.Rating.ToString(), String.Join(", ", result.Tags));
+            do
+            {
+                result = await booru.GetRandomPostAsync(tags.ToArray());
+            } while (result.PostUrl is null);
+
+
+            //var result = await booru.GetRandomPostAsync("yuri score:>50 rating:explicit");
+            logger.Debug(
+                "Post URL: {postUri}\tРейтинг: {rating}\tТеги: {tags}",
+                result.PostUrl.AbsoluteUri,
+                result.Rating.ToString(),
+                String.Join(", ", result.Tags));
 
             return (result.FileUrl?.AbsoluteUri ?? result.Source, result.PostUrl?.AbsoluteUri ?? result.Source, result.Tags.ToArray());
-        }
-
-        async static public Task<(string, string, string[])> Danbooru(NLog.Logger logger, string[]? tags = null, BooruSharp.Search.Post.Rating rating = BooruSharp.Search.Post.Rating.General)
-        {
-            logger.Info("Поиск случайного изображения на Danbooru");
-            return await Gelbooru(logger, tags, rating); // gelbooru and danbooru have same search system
         }
     }
 }

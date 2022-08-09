@@ -17,21 +17,115 @@ Logger logger = LogManager.GetCurrentClassLogger();
 logger.Debug("Иницилизация логгера - успешно");
 #endregion
 
+/// <summary>
+/// Asking user for exit until gets it
+/// </summary>
+/// <param name="message">Message to user</param>
+/// <returns>Return true when user want to exit, false when doesn't</returns>
+bool AskYesOrNo(string message)
+{
+    while (Console.KeyAvailable)
+    {
+        Console.ReadKey();
+    }
+    Console.Write(message);
+    string userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
+    Console.WriteLine();
+    while (!(userAnswer == "y" || userAnswer == "n"))
+    {
+        Console.Write("Введите Y/N ");
+        userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
+        Console.WriteLine();
+    }
+    if (userAnswer == "y")
+    {
+        logger.Debug(@"Пользователь согласился. Сообщение - '{message}'", message);
+        return true;
+    }
+    else
+    {
+        logger.Debug(@"Пользователь отказал. Сообщение - '{message}'", message);
+        return false;
+    }
+}
+
+/// <summary>
+/// Asking user for Yes No or Force
+/// </summary>
+/// <param name="message">Message to user</param>
+/// <returns>Return one of UserAnswer</returns>
+UserAnswer AskYesNoForce(string message)
+{
+    while (Console.KeyAvailable)
+    {
+        Console.ReadKey();
+    }
+    Console.Write(message);
+    string userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
+    Console.WriteLine();
+    while (!(userAnswer == "y" || userAnswer == "n" || userAnswer == "f"))
+    {
+        Console.Write("Введите Y/N/F ");
+        userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
+        Console.WriteLine();
+    }
+    if (userAnswer == "y")
+    {
+        logger.Debug(@"Пользователь согласился");
+        return UserAnswer.Yes;
+    }
+    else if (userAnswer == "n")
+    {
+        logger.Debug(@"Пользователь отказал");
+        return UserAnswer.No;
+    }
+    else
+    {
+        logger.Debug(@"Пользователь принудительно решил запустить");
+        return UserAnswer.Force;
+    }
+}
+
+/// <summary>
+/// Upload displayed in chat bot commands to Telegram
+/// </summary>
+void UpdateCommands(TelegramBotClient bot)
+{
+    var commands = new List<BotCommand>
+    {
+        new BotCommand { Command = "/start", Description = "Начать общение с ботом" },
+        new BotCommand { Command = "/random_image", Description = "Случайный рисунок" },
+        new BotCommand { Command = "/help", Description = "Попросить помощи у бота" }
+    };
+
+    bot.SetMyCommandsAsync(commands);
+}
+
 /* TODO:
- * определение, что бота добавили в группу (MyChatMember)
- * сделать файл с хранением пользователя - групп (XmlSerializer)
- * сделать файл группа - предпочтения, такие как blacklist, теги, boorus, рейтинг (XmlSerializer)
+ + вынести все типы в отдельный класс
+ + сделать файл с хранением пользователя - групп (Json)
+ + сделать файл группа - предпочтения, такие как blacklist, теги, boorus, рейтинг (Json)
+ + добавлять, а не перезаписывать json файл
+ + add users to handler init
+ +- определение, что бота добавили в группу (MyChatMember)
+ + catching new users
  * починить экстренную остановку (CancelKeyPress)
  * сообщение о сбоях (HandlePollingErrorAsync)
+ * catch block from user
+ * redirect arts from /random_image command to UserGroup
+ * tags with /random_image
+ * fix json init
+ * fix add in first time to channel
+ * fix not member 
+ - вынести вспомогательные методы в отдельный файл
 */
 
 #region BotInit
+var users = await JsonWorker.GetUsersAsync();
 var botClient = new TelegramBotClient("5473922129:AAG5oD6OqnVUfR18hNmPMx_U1-WulrYMy-8");
-var filter = new ReceiverOptions { AllowedUpdates = new UpdateType[2] { UpdateType.Message, UpdateType.MyChatMember } };
-var router = new Router();
-var handlers = new Handlers(router, botClient, logger);
-router.noCommandHandler = new Router.Handler(handlers.NoCommandError);
-router.logger = logger;
+var filter = new ReceiverOptions { AllowedUpdates = new UpdateType[2] { UpdateType.Message, UpdateType.MyChatMember }, ThrowPendingUpdates = true};
+var router = new Router(logger);
+var handlers = new Handlers(router, botClient, users, logger);
 var listeners = new Listeners(router, logger);
 logger.Debug("Иницилизация бота - успешно");
 #endregion
@@ -41,20 +135,20 @@ using var cancelSource = new CancellationTokenSource();
 bool shuttingDown = false;
 bool botRunning = false;
 Console.CancelKeyPress += (sender, e) =>
+{
+    shuttingDown = true;
+    if (botRunning)
     {
-        shuttingDown = true;
-        if (botRunning)
-        {
-            logger.Info("Остановка приложения и бота...");
-            cancelSource.Cancel();
-            e.Cancel = true;
-        }
-        else
-        {
-            logger.Info("Остановка приложения...");
-            e.Cancel = false;
-        }
-    };
+        logger.Info("Остановка приложения и бота...");
+        cancelSource.Cancel();
+        e.Cancel = true;
+    }
+    else
+    {
+        logger.Info("Остановка приложения...");
+        e.Cancel = false;
+    }
+};
 
 int unknownErrorCount = 0;
 while (!shuttingDown) // main cycle
@@ -75,21 +169,17 @@ while (!shuttingDown) // main cycle
             {
                 servicesWithError += booru.ToString() + ", ";
             }
-            if (testConnection.Results.Count == testConnection.ServicesWithError.Count)
+            string message = (testConnection.Results.Count == testConnection.ServicesWithError.Count) ?
+                $"Невозможно соеденится со всеми сервисами: {servicesWithError}.\nY/N/F > " :
+                $"Невозможно соеденится с одним или несколькими сервисами: {servicesWithError}. \nY/N/F > ";
+            UserAnswer userAnswer = AskYesNoForce(message);
+            if (userAnswer == UserAnswer.Yes)
             {
-                throw new HttpRequestException($"Невозможно соеденится со всеми сервисами: {servicesWithError}");
+                continue;
             }
-            else
+            else if (userAnswer == UserAnswer.No)
             {
-                UserAnswer userAnswer = AskYesNoForce($"Невозможно соеденится с одним или несколькими сервисами: {servicesWithError}. Y/N/F ");
-                if (userAnswer == UserAnswer.Yes)
-                {
-                    continue;
-                }
-                else if (userAnswer == UserAnswer.No)
-                {
-                    break;
-                }
+                break;
             }
         }
         logger.Debug("Проверка токена бота");
@@ -162,97 +252,9 @@ while (!shuttingDown) // main cycle
 
     logger.Info("Попытка перезапуска бота...");
 }
-Exit();
-
-/// <summary>
-/// Asking user for exit until gets it
-/// </summary>
-/// <param name="message">Message to user</param>
-/// <returns>Return true when user want to exit, false when doesn't</returns>
-bool AskYesOrNo(string message)
+if (!shuttingDown)
 {
-    Console.Write(message);
-    string userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
-    Console.WriteLine();
-    while (!(userAnswer == "y" || userAnswer == "n"))
-    {
-        Console.Write("Введите Y/N ");
-        userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
-        Console.WriteLine();
-    }
-    if (userAnswer == "y")
-    {
-        logger.Debug(@"Пользователь согласился. Сообщение - '{message}'", message);
-        return true;
-    }
-    else
-    {
-        logger.Debug(@"Пользователь отказал. Сообщение - '{message}'", message);
-        return false;
-    }
+    cancelSource.Cancel();
 }
-
-/// <summary>
-/// Asking user for Yes No or Force
-/// </summary>
-/// <param name="message">Message to user</param>
-/// <returns>Return one of UserAnswer</returns>
-UserAnswer AskYesNoForce(string message)
-{
-    Console.Write(message);
-    string userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
-    Console.WriteLine();
-    while (!(userAnswer == "y" || userAnswer == "n" || userAnswer == "f"))
-    {
-        Console.Write("Введите Y/N/F ");
-        userAnswer = Console.ReadKey().KeyChar.ToString().ToLower();
-        Console.WriteLine();
-    }
-    if (userAnswer == "y")
-    {
-        logger.Debug(@"Пользователь согласился");
-        return UserAnswer.Yes;
-    }
-    else if (userAnswer == "n")
-    {
-        logger.Debug(@"Пользователь отказал");
-        return UserAnswer.No;
-    }
-    else
-    {
-        logger.Debug(@"Пользователь принудительно решил запустить");
-        return UserAnswer.Force;
-    }
-}
-
-/// <summary>
-/// Upload displayed in chat bot commands to Telegram
-/// </summary>
-void UpdateCommands(TelegramBotClient bot)
-{
-    var commands = new List<BotCommand>
-    {
-        new BotCommand { Command = "/start", Description = "Начать общение с ботом" },
-        new BotCommand { Command = "/random_image", Description = "Случайный рисунок" },
-        new BotCommand { Command = "/help", Description = "Попросить помощи у бота" }
-    };
-
-    bot.SetMyCommandsAsync(commands);
-}
-
-void Exit()
-{
-    if (!shuttingDown)
-    {
-        cancelSource.Cancel();
-    }
-    LogManager.Shutdown();
-    logger.Info("Остановка бота по желанию пользователя...");
-}
-
-enum UserAnswer
-{
-    Yes,
-    No,
-    Force
-}
+LogManager.Shutdown();
+logger.Info("Остановка бота по желанию пользователя...");
