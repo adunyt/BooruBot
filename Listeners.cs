@@ -23,14 +23,18 @@ namespace HentaiBot
                     " Юзернейм - {username}" +
                     " Имя фамилия пользователя - {firstName} {lastName}",
                     message.Chat.Id, message.Chat.Username ?? "Отстуствует", message.Chat.FirstName ?? "Отстуствует", message.Chat.LastName ?? "Отстуствует");
-                if (message.Text.StartsWith("/") && message.EntityValues is not null && message.Entities[0].Type is MessageEntityType.BotCommand)
+                if (message.Text.StartsWith("/") && message.Entities is not null && message.Entities[0].Type is MessageEntityType.BotCommand)
                 {
-                    await router.RouteCommand(update, cancellationToken);
+                    await router.RouteCommand(message, cancellationToken);
                 }
             }
-            else if (update.Type == UpdateType.MyChatMember)
+            else if (update.Type == UpdateType.MyChatMember && update.MyChatMember is not null)
             {
-                await router.RouteMembership(update, cancellationToken);
+                await router.RouteMembership(update.MyChatMember, cancellationToken);
+            }
+            else
+            {
+                logger.Error("Не обработанное обновление. Тип {type}", update.Type);
             }
         }
     }

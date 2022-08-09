@@ -107,23 +107,27 @@ void UpdateCommands(TelegramBotClient bot)
  + сделать файл группа - предпочтения, такие как blacklist, теги, boorus, рейтинг (Json)
  + добавлять, а не перезаписывать json файл
  + add users to handler init
- +- определение, что бота добавили в группу (MyChatMember)
+ + определение, что бота добавили в группу (MyChatMember)
+ +- redirect arts from /random_image command to UserGroup
+ + fix json init
  + catching new users
  * починить экстренную остановку (CancelKeyPress)
  * сообщение о сбоях (HandlePollingErrorAsync)
  * catch block from user
- * redirect arts from /random_image command to UserGroup
  * tags with /random_image
- * fix json init
  * fix add in first time to channel
  * fix not member 
+ * rename all groups to channel
+ * rewrite usergroup and botuser
+ ? jsonWorker return List<>
+ - loli moment
  - вынести вспомогательные методы в отдельный файл
 */
 
 #region BotInit
 var users = await JsonWorker.GetUsersAsync();
 var botClient = new TelegramBotClient("5473922129:AAG5oD6OqnVUfR18hNmPMx_U1-WulrYMy-8");
-var filter = new ReceiverOptions { AllowedUpdates = new UpdateType[2] { UpdateType.Message, UpdateType.MyChatMember }, ThrowPendingUpdates = true};
+var filter = new ReceiverOptions { AllowedUpdates = new UpdateType[2] { UpdateType.Message, UpdateType.MyChatMember }/*, ThrowPendingUpdates = true */};
 var router = new Router(logger);
 var handlers = new Handlers(router, botClient, users, logger);
 var listeners = new Listeners(router, logger);

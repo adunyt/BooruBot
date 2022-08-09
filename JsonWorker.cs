@@ -13,18 +13,37 @@ namespace HentaiBot
             var backupFile = File.WriteAllTextAsync($"users-{DateTime.Now.ToFileTime}.bak", jsonFile.Result);
         }
 
-        async public static Task SaveUserAsync(BotUser botUser)
+        async public static Task<bool> SaveUserAsync(BotUser botUser) 
         {
             var users = GetUsersAsync().Result;
-            users.Add(botUser);
-            await SaveAllUsersAsync(users);
+            if (!users.Exists(usr => usr.Id == botUser.Id))
+            {
+                users.Add(botUser);
+                bool isOk = await SaveAllUsersAsync(users);
+                return isOk;
+            }
+            else
+            {
+                return false;
+            }
         }
 
-        async private static Task SaveAllUsersAsync(List<BotUser> users)
+        async private static Task<bool> SaveAllUsersAsync(List<BotUser> users)
         {
             using var jsonFile = File.OpenWrite("users.json");
-            await JsonSerializer.SerializeAsync(jsonFile, users);
-            await jsonFile.DisposeAsync();
+            try
+            {
+                await JsonSerializer.SerializeAsync(jsonFile, users);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+            finally
+            {
+                await jsonFile.DisposeAsync();
+            }
         }
 
         /// <summary>
@@ -34,7 +53,7 @@ namespace HentaiBot
         /// <param name="groupId"></param>
         /// <param name="booru"></param>
         /// <returns>Returns true on success, false on fault</returns>
-        async public static Task<bool> AddBooruToUserAsync(long userId, long groupId, Booru booru)
+        async public static Task<bool> AddBooruToUserAsync(long userId, long groupId, Booru booru) // !!! TODO: test !!!
         {
             var users = GetUsersAsync().Result;
             BotUser? user = users.Find(user => user.Id == userId);
@@ -42,6 +61,7 @@ namespace HentaiBot
             if (group is not null || !group.Boorus.Contains(booru))
             {
                 group.Boorus.Add(booru);
+
                 await SaveAllUsersAsync(users);
                 return true;
             }
@@ -53,13 +73,15 @@ namespace HentaiBot
             //users.Add(user);
         }
 
-        async public static Task<bool> AddGroupToUserAsync(long userId, long groupId)
+        async public static Task<bool> RemoveGroupFromUserAsync(long userId, long groupId) // !!! TODO: test !!!
         {
             var users = GetUsersAsync().Result;
             BotUser? user = users.Find(user => user.Id == userId);
-            if (user is not null || !user.Groups.Exists(group => group.Id == groupId))
+            var groups = user?.Groups;
+            var group = groups.Find(group => group.Id == groupId);
+            if (group is not null)
             {
-                user.Groups.Add(new UserGroup(groupId, userId));
+                groups.Remove(group);
                 await SaveUserAsync(user);
                 return true;
             }
@@ -69,7 +91,24 @@ namespace HentaiBot
             }
         }
 
-        async public static Task<List<BotUser>> GetUsersAsync()
+        async public static Task<bool> AddGroupToUserAsync(long userId, long groupId) // !!! TODO: test !!!
+        {
+            var users = GetUsersAsync().Result;
+            BotUser? user = users.Find(user => user.Id == userId);
+            var groups = user?.Groups;
+            if (groups?.Exists(group => group.Id == groupId) is not null && groups.Count < 5)
+            {
+                groups.Add(new UserGroup(groupId, userId));
+                await SaveUserAsync(user);
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        async public static Task<List<BotUser>> GetUsersAsync() // !!! TODO: test !!!
         {
             if (!File.Exists("users.json") || await File.ReadAllTextAsync("users.json") == "")
             {

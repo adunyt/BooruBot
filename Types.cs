@@ -27,7 +27,7 @@ namespace HentaiBot
     /// <returns></returns>
     internal delegate Task MessageHandler(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs);
 
-    internal delegate Task UpdateHandler(Update update, CancellationToken cancellationToken, params string[] attrs);
+    internal delegate Task MembershipHandler(ChatMemberUpdated memberUpdated, CancellationToken cancellationToken, params string[] attrs);
 
     /// <summary>
     /// Contain result of testing some services

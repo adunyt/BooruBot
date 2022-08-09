@@ -18,29 +18,59 @@ namespace HentaiBot
             router.commandRoutes.Add("/start", new MessageHandler(StartHandler));
             router.commandRoutes.Add("/help", new MessageHandler(HelpHandler));
             router.commandRoutes.Add("/random_image", new MessageHandler(GetImageHandler));
-            router.commandRoutes.Add("/gelbooru", new MessageHandler(GelbooruHandler));
+            router.commandRoutes.Add("/gelbooru", new MessageHandler(BooruHandler));
             router.commandRoutes.Add("/crash", new MessageHandler(NoCommandError));
+            router.commandRoutes.Add("/loli", new MessageHandler(AntiLoliHandler));
             router.commandRoutes.Add("unknown", new MessageHandler(NoCommandError));
-            router.memberRoutes.Add("me", new UpdateHandler(ChangedMembershipHandler));
+            router.memberRoutes.Add("me", new MembershipHandler(ChangedMembershipHandler));
         }
 
-        async public Task GelbooruHandler(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs)
+        async public Task AntiLoliHandler(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs)
+        {
+            await using (Stream
+                        video = System.IO.File.OpenRead("fakeloli.mp4"),
+                        thumb = System.IO.File.OpenRead("thumb.jpg")
+                        )
+            {
+                await botClient.SendVideoAsync(
+                    chatId: chatId,
+                    video: video,
+                    thumb: new InputMedia(thumb, "thumb.jpg"),
+                    parseMode: ParseMode.Html,
+                    caption: $"Ваш IP адрес был передан в правоохранительные органы, и через несколько минут к вам будет выслана оперативная служба"
+                    );
+            }
+        }
+
+        async public Task BooruHandler(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs)
         {
             await JsonWorker.AddBooruToUserAsync(chatId, -1001629756560, Booru.GelBooru);
         }
 
-            async public Task StartHandler(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs)
+        async public Task StartHandler(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs)
         {
             if (!users.Exists(user => user.Id == chatId))
             {
                 logger.Info("Добавление нового пользователя с id {id}", chatId);
-                await JsonWorker.SaveUserAsync(new BotUser(chatId));
-                await botClient.SendAnimationAsync(
-                    chatId: chatId,
-                    animation: "https://c.tenor.com/HfOIiR-ig-8AAAAC/tenor.gif",
-                    caption: "Привет! Добавь меня в канал, чтобы начать",
-                    cancellationToken: cancellationToken
-                    );
+                var newUser = new BotUser(chatId);
+                bool isSaved = await JsonWorker.SaveUserAsync(newUser);
+                if (isSaved)
+                {
+                    users.Add(newUser);
+                    await botClient.SendAnimationAsync(
+                        chatId: chatId,
+                        animation: "https://c.tenor.com/HfOIiR-ig-8AAAAC/tenor.gif",
+                        caption: "Привет! Добавь меня в канал, чтобы начать",
+                        cancellationToken: cancellationToken
+                        );
+                }
+                else
+                {
+                    await botClient.SendTextMessageAsync(
+                        chatId: chatId,
+                        text: "Произошла ошибка, повторите попытку. Если ошибка повторяется, то о ней уже знают, и в близжайшем времени устранят",
+                        cancellationToken: cancellationToken);
+                }
             }
             else
             {
@@ -83,9 +113,9 @@ namespace HentaiBot
                     var link = result.Item1;
                     var postUri = result.Item2;
                     var tags = result.Item3;
-                    await botClient.SendPhotoAsync(
+                    await botClient.SendAnimationAsync(
                         chatId: group.Id,
-                        photo: link,
+                        animation: link,
                         parseMode: ParseMode.Html,
                         caption: $"<a href=\"{postUri}\">Источник</a>",
                         cancellationToken: cancellationToken);
@@ -120,7 +150,7 @@ namespace HentaiBot
 
         async public Task HelpHandler(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs)
         {
-            Message sentMessage = await botClient.SendTextMessageAsync(
+            await botClient.SendTextMessageAsync(
                 chatId: chatId,
                 text: "/random_image - случайное изображение с Danbooru или Gelbooru\n/help - вывод данного сообщения\n/start - приветственное сообщение",
                 cancellationToken: cancellationToken);
@@ -142,44 +172,78 @@ namespace HentaiBot
 
         async public Task NoCommandError(long chatId, int messageId, string command, CancellationToken cancellationToken, params string[] attrs)
         {
-            Message sentMessage = await botClient.SendTextMessageAsync(
+            await botClient.SendTextMessageAsync(
                 chatId: chatId,
                 text: "Я не знаю такой команды",
                 cancellationToken: cancellationToken);
         }
 
-        async public Task ChangedMembershipHandler(Update update, CancellationToken cancellationToken, params string[] attrs)
+        async public Task ChangedMembershipHandler(ChatMemberUpdated membership, CancellationToken cancellationToken, params string[] attrs)
         {
-            var membership = update.MyChatMember;
             var whoInvited = membership.From;
             var channel = membership.Chat;
             var newStatus = membership.NewChatMember.Status;
             var oldStatus = membership.OldChatMember.Status;
+            var whoInvitedString = $"{whoInvited.FirstName} {whoInvited.LastName ?? "\b"} с id: {whoInvited.Id}";
 
-            logger.Info("Пользователь {user} изменил участие в канале {channel}. Стало - {new}, было - {old}", $"{whoInvited.FirstName} {whoInvited.LastName ?? "\b"} с id: {whoInvited.Id}", channel.Title, newStatus, oldStatus);
-            var user = users.Find(user => user.Id == whoInvited.Id);            
-            if (whoInvited.Id == 136817688)
+            logger.Info("Пользователь {user} изменил участие в канале {channel}. Было - {old}, Стало - {new}", whoInvitedString, channel.Title, oldStatus, newStatus);
+            var user = users.Find(user => user.Id == whoInvited.Id);
+
+            if (user is not null)
             {
-                logger.Warn("Пользователь изменивший участие - Channel_bot. Попытка выйти из канала");
-                if (newStatus == ChatMemberStatus.Administrator || newStatus == ChatMemberStatus.Member)
+                switch (newStatus)
                 {
-                    await botClient.LeaveChatAsync(channel.Id, cancellationToken);
+                    case ChatMemberStatus.Creator:
+                    case ChatMemberStatus.Administrator:
+                    case ChatMemberStatus.Member:
+                        await JsonWorker.AddGroupToUserAsync(user.Id, channel.Id);
+                        await botClient.SendAnimationAsync(
+                            chatId: whoInvited.Id,
+                            animation: "https://i.pinimg.com/originals/ca/91/74/ca9174ba5fb038712fd7fb9b754ce3c9.gif",
+                            caption: $"Теперь я могу отправлять арты в канал {channel.FirstName}",
+                            cancellationToken: cancellationToken
+                            );
+                        break;
+                    case ChatMemberStatus.Left:
+                    case ChatMemberStatus.Kicked:
+                        bool isDeleted = await JsonWorker.RemoveGroupFromUserAsync(user.Id, channel.Id);
+                        var groups = user.Groups;
+                        var group = groups.Find(group => group.Id == channel.Id);
+                        if (isDeleted)
+                        {
+                            groups.Remove(group);
+                            await botClient.SendPhotoAsync(
+                                chatId: whoInvited.Id,
+                                photo: "https://media.tenor.com/images/abe6d1fd116074fa291c05c2dfe9c2c2/tenor.gif",
+                                caption: $"Увидимся на другом канале",
+                                cancellationToken: cancellationToken
+                             );
+                        }
+                        else
+                        {
+                            logger.Warn("Произошла ошибка во время удаления группы {name} из списка групп пользователя {name}", channel.FirstName, whoInvitedString);
+                            await botClient.SendTextMessageAsync(
+                                chatId: whoInvited.Id,
+                                text: "Произошла ошибка во время удаления группы из списка. Снова добавьте и удалите бота из группы во избежании проблем",
+                                cancellationToken: cancellationToken);
+                        }
+                        break;
+                    case ChatMemberStatus.Restricted:
+                        break;
                 }
-                logger.Info("Выход из канала {} прошел успешно", channel.FirstName);
-            }
-            else if (user is null)
-            {
-                await botClient.LeaveChatAsync(channel.Id, cancellationToken);
             }
             else
             {
-                await JsonWorker.AddGroupToUserAsync(user.Id, channel.Id);
-                await botClient.SendPhotoAsync( 
-                    chatId: whoInvited.Id,
-                    photo: "https://i.imgur.com/ykY23lW.jpeg",
-                    caption: $"Отлично! Теперь я могу отправлять арты в группу {channel.FirstName}",
-                    cancellationToken: cancellationToken
-                 );
+                switch (newStatus)
+                {
+                    case ChatMemberStatus.Creator:
+                    case ChatMemberStatus.Administrator:
+                    case ChatMemberStatus.Member:
+                        logger.Info("Пользователь {user} не является участником бота", whoInvitedString);
+                        await botClient.LeaveChatAsync(channel.Id, cancellationToken);
+                        logger.Info("Выход из канала {channel} пользователя {user} выполнен", channel.FirstName, whoInvitedString);
+                        break;
+                }
             }
         }
 
