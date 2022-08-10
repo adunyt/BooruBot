@@ -1,6 +1,6 @@
 ﻿using Telegram.Bot.Types;
 
-namespace HentaiBot
+namespace BooruBot
 {
     internal class Router
     {

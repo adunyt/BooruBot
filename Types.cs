@@ -2,7 +2,7 @@
 using System.Text.Json.Serialization;
 using Telegram.Bot.Types;
 
-namespace HentaiBot
+namespace BooruBot
 {
     enum UserAnswer
     {

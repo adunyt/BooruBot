@@ -2,7 +2,7 @@
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
-namespace HentaiBot
+namespace BooruBot
 {
     internal class Listeners
     {

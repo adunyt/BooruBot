@@ -1,4 +1,4 @@
-﻿using HentaiBot;
+﻿using BooruBot;
 using NLog;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;

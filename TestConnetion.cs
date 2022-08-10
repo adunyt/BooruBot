@@ -1,6 +1,6 @@
 ﻿using BooruSharp.Booru;
 
-namespace HentaiBot
+namespace BooruBot
 {
 
     internal class TestConnetion

@@ -1,7 +1,7 @@
 ﻿using BooruSharp.Booru;
 using BooruSharp.Search.Post;
 
-namespace HentaiBot.Image
+namespace BooruBot.Image
 {
     static internal class ImageFinder
     {

@@ -1,9 +1,9 @@
-﻿using HentaiBot.Image;
+﻿using BooruBot.Image;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
-namespace HentaiBot
+namespace BooruBot
 {
     internal class Handlers
     {
