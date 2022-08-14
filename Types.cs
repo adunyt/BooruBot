@@ -29,7 +29,7 @@ namespace BooruBot
         Preferences
     }
 
-    enum BotState
+    enum BotUserState
     {
         Start,
         SetMode,
@@ -43,7 +43,7 @@ namespace BooruBot
         Block
     }
 
-    public enum MessageToUser
+    public enum BotMessage
     {
         Help,
         ChannelError,
@@ -58,7 +58,7 @@ namespace BooruBot
         WaitImage
     }
 
-    enum KeyboardMessage
+    enum BotKeyboardText
     {
         SingleMode,
         ChannelMode,
@@ -102,23 +102,6 @@ namespace BooruBot
         }
     }
 
-    internal class UserChannel
-    {
-        [JsonConstructor]
-        public UserChannel(long id, long ownerId)
-        {
-            Id = id;
-            OwnerId = ownerId;
-        }
-
-        public long Id { get; private set; }
-        public long OwnerId { get; set; }
-        public HashSet<string> BlacklistTags { get; set; } = new();
-        public HashSet<string> PrefersTags { get; set; } = new();
-        public List<Booru> Boorus { get; set; } = new();
-        public HashSet<BooruSharp.Search.Post.Rating> Ratings { get; set; } = new();
-    }
-
     internal class BotUser
     {
         [JsonConstructor]
@@ -131,19 +114,19 @@ namespace BooruBot
 
         public bool Block { get; set; }
 
-        public BotState State { get; set; } = BotState.Start;
+        public BotUserState State { get; set; } = BotUserState.Start;
 
         public UsingMode UsingMode { get; set; }
 
-        public long? CurrentGroupId { get; set; } = null;
+        public long? CurrentChatId { get; set; } = null;
 
-        public Dictionary<long, UserChannel> Channels { get ; set; } = new(); // TODO: make private, but accessible to json
+        public Dictionary<long, BotUserChat> Chats { get ; set; } = new(); // TODO: make private, but accessible to json
 
-        public bool AddChannel(UserChannel userChannel)
+        public bool AddChat(BotUserChat userChannel)
         {
-            if (!Channels.ContainsKey(userChannel.Id))
+            if (!Chats.ContainsKey(userChannel.Id))
             {
-                Channels.Add(userChannel.Id, userChannel);
+                Chats.Add(userChannel.Id, userChannel);
                 return true;
             }
             else
@@ -155,9 +138,9 @@ namespace BooruBot
 
         public void AddBooru(long ChannelId, Booru booru)
         {
-            if (Channels.ContainsKey(ChannelId) && !Channels[ChannelId].Boorus.Contains(booru))
+            if (Chats.ContainsKey(ChannelId) && !Chats[ChannelId].Boorus.Contains(booru))
             {
-                Channels[ChannelId].Boorus.Add(booru);
+                Chats[ChannelId].Boorus.Add(booru);
             }
             else
             {
@@ -167,9 +150,9 @@ namespace BooruBot
 
         public void AddTagList(long ChannelId, TagList list, IEnumerable<string> tags)
         {
-            if (Channels.ContainsKey(ChannelId))
+            if (Chats.ContainsKey(ChannelId))
             {
-                UserChannel Channel = Channels[ChannelId];
+                BotUserChat Channel = Chats[ChannelId];
                 switch (list)
                 {
                     case TagList.Blacklist:
@@ -188,9 +171,9 @@ namespace BooruBot
 
         public void AddRating(long ChannelId, BooruSharp.Search.Post.Rating rating)
         {
-            if (Channels.ContainsKey(ChannelId))
+            if (Chats.ContainsKey(ChannelId))
             {
-                Channels[ChannelId].Ratings.Add(rating);
+                Chats[ChannelId].Ratings.Add(rating);
             }
             else
             {
@@ -200,9 +183,9 @@ namespace BooruBot
 
         public void RemoveBooru(long ChannelId, Booru booru)
         {
-            if (Channels.ContainsKey(ChannelId) && Channels[ChannelId].Boorus.Contains(booru))
+            if (Chats.ContainsKey(ChannelId) && Chats[ChannelId].Boorus.Contains(booru))
             {
-                Channels[ChannelId].Boorus.Remove(booru);
+                Chats[ChannelId].Boorus.Remove(booru);
             }
             else
             {
@@ -212,9 +195,9 @@ namespace BooruBot
 
         public void RemoveTagList(long ChannelId, TagList list, IEnumerable<string> tags)
         {
-            if (Channels.ContainsKey(ChannelId))
+            if (Chats.ContainsKey(ChannelId))
             {
-                UserChannel Channel = Channels[ChannelId];
+                BotUserChat Channel = Chats[ChannelId];
                 switch (list)
                 {
                     case TagList.Blacklist:
@@ -233,9 +216,9 @@ namespace BooruBot
 
         public List<Booru> GetBooru(long ChannelId)
         {
-            if (Channels.ContainsKey(ChannelId))
+            if (Chats.ContainsKey(ChannelId))
             {
-                return Channels[ChannelId].Boorus;
+                return Chats[ChannelId].Boorus;
             }
             else
             {
@@ -245,9 +228,9 @@ namespace BooruBot
 
         public HashSet<string> GetTagList(long ChannelId, TagList list)
         {
-            if (Channels.ContainsKey(ChannelId))
+            if (Chats.ContainsKey(ChannelId))
             {
-                UserChannel Channel = Channels[ChannelId];
+                BotUserChat Channel = Chats[ChannelId];
                 return list switch
                 {
                     TagList.Blacklist => Channel.BlacklistTags,
@@ -261,11 +244,11 @@ namespace BooruBot
             }
         }
 
-        public bool RemoveChannelIfExist(long ChannelId)
+        public bool RemoveChat(long ChannelId)
         {
-            if (Channels.ContainsKey(ChannelId))
+            if (Chats.ContainsKey(ChannelId))
             {
-                Channels.Remove(ChannelId);
+                Chats.Remove(ChannelId);
                 return true;
             }
             else
@@ -273,5 +256,23 @@ namespace BooruBot
                 return false;
             }
         }
+    }
+
+    internal class BotUserChat
+    {
+        [JsonConstructor]
+        public BotUserChat(long id, long ownerId)
+        {
+            Id = id;
+            OwnerId = ownerId;
+        }
+
+        public long Id { get; private set; }
+        public long OwnerId { get; set; }
+        public bool IsReady { get; set; } = false;
+        public HashSet<string> BlacklistTags { get; set; } = new();
+        public HashSet<string> PrefersTags { get; set; } = new();
+        public List<Booru> Boorus { get; set; } = new();
+        public HashSet<BooruSharp.Search.Post.Rating> Ratings { get; set; } = new();
     }
 }

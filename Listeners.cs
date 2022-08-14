@@ -6,12 +6,15 @@ namespace BooruBot
 {
     internal class Listeners
     {
-        private readonly NLog.Logger logger = NLog.LogManager.GetLogger("Listeners");
-        private readonly Router router;
         public Listeners(Router router)
         {
             this.router = router;
         }
+
+        private readonly NLog.Logger logger = NLog.LogManager.GetLogger("Listeners");
+
+        private readonly Router router;
+
         async public Task MainListener(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
             logger.Debug($"Получено обновление, тип - {update.Type}");

@@ -14,18 +14,18 @@ namespace BooruBot
         {
             this.users = users;
             this.botClient = botClient;
-            router.commandRoutes.Add("/start", new MessageHandler(Start));
-            router.commandRoutes.Add("/help", new MessageHandler(Help));
-            router.commandRoutes.Add("/random_image", new MessageHandler(GetImage));
-            router.commandRoutes.Add("/loli", new MessageHandler(AntiLoli));
-            router.commandRoutes.Add("unknown", new MessageHandler(Unknown));
+            router.CommandRoutes.Add("/start", new MessageHandler(Start));
+            router.CommandRoutes.Add("/help", new MessageHandler(Help));
+            router.CommandRoutes.Add("/random_image", new MessageHandler(GetImage));
+            router.CommandRoutes.Add("/loli", new MessageHandler(AntiLoli));
+            router.CommandRoutes.Add("unknown", new MessageHandler(Unknown));
 
-            router.memberRoutes.Add("me", new MembershipHandler(ChangedMembership));
+            router.MemberRoutes.Add("me", new MembershipHandler(ChangedMembership));
 
-            router.settingsRoutes.Add("mode", new SettingsHandler(SetMode));
-            router.settingsRoutes.Add("booru", new SettingsHandler(SetBooru));
-            router.settingsRoutes.Add("tags", new SettingsHandler(SetTags));
-            router.settingsRoutes.Add("end", new SettingsHandler(SaveTags));
+            router.SettingsRoutes.Add("mode", new SettingsHandler(SetMode));
+            router.SettingsRoutes.Add("booru", new SettingsHandler(SetBooru));
+            router.SettingsRoutes.Add("tags", new SettingsHandler(SetTags));
+            router.SettingsRoutes.Add("end", new SettingsHandler(SaveTags));
         }
 
         #region Setting
@@ -35,9 +35,9 @@ namespace BooruBot
             switch (message)
             {
                 case "Одиночный 👤":
-                    botUser.AddChannel(new UserChannel(botUser.Id, botUser.Id)); //add fake channel, with user id
-                    botUser.CurrentGroupId = botUser.Id;
-                    botUser.State = BotState.SetBooru;
+                    botUser.AddChat(new BotUserChat(botUser.Id, botUser.Id)); //add fake channel, with user id
+                    botUser.CurrentChatId = botUser.Id;
+                    botUser.State = BotUserState.SetBooru;
                     await JsonWorker.UpdateUserAsync(botUser);
                     ReplyKeyboardMarkup booruReply = new(new[] { new KeyboardButton[] { "Gelbooru", "Danbooru" } })
                     {
@@ -52,7 +52,7 @@ namespace BooruBot
                         );
                     break;
                 case "Каналы 👥":
-                    botUser.State = BotState.WaitForChannel;
+                    botUser.State = BotUserState.WaitForChannel;
                     await JsonWorker.UpdateUserAsync(botUser);
                     await botClient.SendAnimationAsync(
                         chatId: botUser.Id,
@@ -79,7 +79,7 @@ namespace BooruBot
 
         async public Task SetBooru(string message, BotUser botUser, CancellationToken cancellationToken, Update? update = null)
         {
-            long currentGroupId = botUser.CurrentGroupId ?? throw new NullReferenceException($"У пользователя с id {botUser.Id} нет активной группы");
+            long currentGroupId = botUser.CurrentChatId ?? throw new NullReferenceException($"У пользователя с id {botUser.Id} нет активной группы");
             switch (message.ToLower())
             {
                 case "gelbooru":
@@ -89,7 +89,7 @@ namespace BooruBot
                     break;
                 case "danbooru":
                     botUser.AddBooru(currentGroupId, Booru.GelBooru);
-                    botUser.State = BotState.SetTags;
+                    botUser.State = BotUserState.SetTags;
                     await JsonWorker.UpdateUserAsync(botUser);
                     await SendTagsMenu(botUser, cancellationToken);
                     break;
@@ -108,9 +108,86 @@ namespace BooruBot
             }
         }
 
+        async public Task SetTags(string message, BotUser botUser, CancellationToken cancellationToken, Update? update = null)
+        {
+            if (update?.CallbackQuery?.Message is null)
+            {
+                logger.Error("В {method} передан пустой (null) Update или CallbackQuery или Message", nameof(SetTags));
+                throw new ArgumentNullException(paramName: nameof(update), message: "Update.CallbackQuery должен быть не null для данной функции");
+            }
+            await botClient.AnswerCallbackQueryAsync(
+                callbackQueryId: update.CallbackQuery.Id,
+                cancellationToken: cancellationToken);
+            string text;
+            switch (message)
+            {
+                case "blacklist":
+                    botUser.State = BotUserState.SetBlacklist;
+                    text = "не хочешь видеть";
+                    break;
+                case "preferences":
+                    botUser.State = BotUserState.SetPreferences;
+                    text = "ты хотел бы видеть";
+                    break;
+                case "skip":
+                    await SaveTags("", botUser, cancellationToken);
+                    return;
+                default:
+                    logger.Warn("В аргументе message должна быть одна из следующий строчек: blacklist, preferences, skip");
+                    return;
+            }
+            await JsonWorker.UpdateUserAsync(botUser);
+            await botClient.EditMessageTextAsync(
+                chatId: botUser.Id,
+                messageId: update.CallbackQuery.Message.MessageId,
+                text: $"Введи теги, которые {text}, через запятую.\nНапример: <code>2girls, nude</code>",
+                parseMode: ParseMode.Html,
+                cancellationToken: cancellationToken
+                );
+        }
+
+        async public Task SaveTags(string message, BotUser botUser, CancellationToken cancellationToken, Update? update = null)
+        {
+            long currentGroupId = botUser.CurrentChatId ?? throw new NullReferenceException($"У пользователя с id {botUser.Id} нет активной группы");
+            if (botUser.State == BotUserState.SetTags && message == "")
+            {
+                botUser.State = BotUserState.Ready;
+                botUser.Chats[currentGroupId].IsReady = true;
+                await JsonWorker.UpdateUserAsync(botUser);
+                await botClient.SendTextMessageAsync( // TODO: make choose if channels more than 1
+                    chatId: botUser.Id,
+                    text: $"Готово! Теперь отправь мне /random_image чтобы отправить изображение в только что настроенный чат",
+                    cancellationToken: cancellationToken,
+                    replyMarkup: new ReplyKeyboardRemove()
+                    );
+            }
+            else
+            {
+                var tags = new List<string>(message.Split(", "));
+                switch (botUser.State)
+                {
+                    case BotUserState.SetBlacklist:
+                        botUser.AddTagList(currentGroupId, TagList.Blacklist, tags);
+                        break;
+                    case BotUserState.SetPreferences:
+                        botUser.AddTagList(currentGroupId, TagList.Preferences, tags);
+                        break;
+                    default:
+                        throw new Exception("У botUser неправильное состояние");
+                }
+                await JsonWorker.UpdateUserAsync(botUser);
+                await botClient.SendTextMessageAsync(
+                    chatId: botUser.Id,
+                    text: "Готово!",
+                    cancellationToken: cancellationToken
+                    );
+                await SendTagsMenu(botUser, cancellationToken);
+            }
+        }
+
         async private Task SendTagsMenu(BotUser botUser, CancellationToken cancellationToken)
         {
-            botUser.State = BotState.SetTags;
+            botUser.State = BotUserState.SetTags;
             await JsonWorker.UpdateUserAsync(botUser);
             InlineKeyboardMarkup selectTags = new(new[]
             {
@@ -128,83 +205,6 @@ namespace BooruBot
                 chatId: botUser.Id,
                 text: "Если хочешь изменить теги, то выбери один из вариантов, или нажми далее",
                 replyMarkup: selectTags,
-                cancellationToken: cancellationToken
-                );
-        }
-
-        async public Task SaveTags(string message, BotUser botUser, CancellationToken cancellationToken, Update? update = null)
-        {
-            if (botUser.State == BotState.SetTags && message == "")
-            {
-                botUser.State = BotState.Ready;
-                botUser.CurrentGroupId = null;
-                await JsonWorker.UpdateUserAsync(botUser);
-                await botClient.SendTextMessageAsync(
-                    chatId: botUser.Id,
-                    text: $"Готово! Теперь отправь мне /random_image чтобы получить изображение",
-                    cancellationToken: cancellationToken,
-                    replyMarkup: new ReplyKeyboardRemove()
-                    );
-            }
-            else
-            {
-                long currentGroupId = botUser.CurrentGroupId ?? throw new NullReferenceException($"У пользователя с id {botUser.Id} нет активной группы");
-                var tags = new List<string>(message.Split(", "));
-                switch (botUser.State)
-                {
-                    case BotState.SetBlacklist:
-                        botUser.AddTagList(currentGroupId, TagList.Blacklist, tags);
-                        break;
-                    case BotState.SetPreferences:
-                        botUser.AddTagList(currentGroupId, TagList.Preferences, tags);
-                        break;
-                    default:
-                        throw new Exception("У botUser неправильное состояние");
-                }
-                await JsonWorker.UpdateUserAsync(botUser);
-                await botClient.SendTextMessageAsync(
-                    chatId: botUser.Id,
-                    text: "Готово!",
-                    cancellationToken: cancellationToken
-                    );
-                await SendTagsMenu(botUser, cancellationToken);
-            }
-        }
-
-        async public Task SetTags(string message, BotUser botUser, CancellationToken cancellationToken, Update? update = null)
-        {
-            if (update?.CallbackQuery?.Message is null)
-            {
-                logger.Error("В {method} передан пустой (null) Update или CallbackQuery или Message", nameof(SetTags));
-                throw new ArgumentNullException(paramName: nameof(update), message: "Update.CallbackQuery должен быть не null для данной функции");
-            }
-            await botClient.AnswerCallbackQueryAsync(
-                callbackQueryId: update.CallbackQuery.Id,
-                cancellationToken: cancellationToken);
-            string text;
-            switch (message)
-            {
-                case "blacklist":
-                    botUser.State = BotState.SetBlacklist;
-                    text = "не хочешь видеть";
-                    break;
-                case "preferences":
-                    botUser.State = BotState.SetPreferences;
-                    text = "ты хотел бы видеть";
-                    break;
-                case "skip":
-                    await SaveTags("", botUser, cancellationToken);
-                    return;
-                default:
-                    logger.Warn("В аргументе message должна быть одна из следующий строчек: blacklist, preferences, skip");
-                    return;
-            }
-            await JsonWorker.UpdateUserAsync(botUser);
-            await botClient.EditMessageTextAsync(
-                chatId: botUser.Id,
-                messageId: update.CallbackQuery.Message.MessageId,
-                text: $"Введи теги, которые {text}, через запятую.\nНапример: <code>2girls, nude</code>",
-                parseMode: ParseMode.Html,
                 cancellationToken: cancellationToken
                 );
         }
@@ -232,24 +232,24 @@ namespace BooruBot
                     await botClient.SendAnimationAsync(
                         chatId: chatId,
                         animation: "https://c.tenor.com/HfOIiR-ig-8AAAAC/tenor.gif",
-                        caption: Constants.MESSAGES[MessageToUser.Start],
+                        caption: Constants.MESSAGES[BotMessage.Start],
                         replyMarkup: replyKeyboardMarkup,
                         cancellationToken: cancellationToken
                         );
-                    newUser.State = BotState.SetMode;
+                    newUser.State = BotUserState.SetMode;
                     users.Add(chatId, newUser);
                 }
                 else
                 {
                     await botClient.SendTextMessageAsync(
                         chatId: chatId,
-                        text: Constants.MESSAGES[MessageToUser.UnknownError],
+                        text: Constants.MESSAGES[BotMessage.UnknownError],
                         cancellationToken: cancellationToken);
                 }
             }
             else
             {
-                if (users.ContainsKey(chatId) && users[chatId].State == BotState.Ready)
+                if (users.ContainsKey(chatId) && users[chatId].State == BotUserState.Ready)
                 {
                     await botClient.SendTextMessageAsync(
                         chatId: chatId,
@@ -278,7 +278,7 @@ namespace BooruBot
         {
             Message sentMessage = await botClient.SendTextMessageAsync(
                 chatId: chatId,
-                text: Constants.MESSAGES[MessageToUser.WaitImage],
+                text: Constants.MESSAGES[BotMessage.WaitImage],
                 cancellationToken: cancellationToken);
 
             try
@@ -289,7 +289,7 @@ namespace BooruBot
                     return;
                 }
                 var userBot = users[chatId];
-                if (userBot.State != BotState.Ready)
+                if (userBot.State != BotUserState.Ready)
                 {
                     await botClient.SendTextMessageAsync(
                         chatId: chatId,
@@ -297,7 +297,7 @@ namespace BooruBot
                         cancellationToken: cancellationToken);
                     return;
                 }
-                var userChannels = userBot.Channels;
+                var userChannels = userBot.Chats;
                 foreach (var Channel in userChannels.Values) // TODO: make choose to group
                 {
                     var randomBooru = new Random().Next(Channel.Boorus.Count);
@@ -311,7 +311,7 @@ namespace BooruBot
                             booru = new BooruSharp.Booru.DanbooruDonmai();
                             break;
                     }
-                    var result = await ImageFinder.Abooru(booru, logger);
+                    var result = await ImageFinder.Random(booru, logger);
                     var link = result.Item1;
                     var postUri = result.Item2;
                     var tags = result.Item3;
@@ -328,7 +328,7 @@ namespace BooruBot
                 logger.Error(e, "У пользователя с id {id} нет активных каналов, комманда /random_image не может быть выполнена", chatId);
                 await botClient.SendTextMessageAsync(
                     chatId: chatId,
-                    text: Constants.MESSAGES[MessageToUser.ChannelError],
+                    text: Constants.MESSAGES[BotMessage.ChannelError],
                     cancellationToken: cancellationToken
                     );
             }
@@ -337,7 +337,7 @@ namespace BooruBot
                 logger.Error(e, "Произошла ошибка при попытке отправить фото по запросу пользователя с id {id}", chatId);
                 await botClient.SendTextMessageAsync(
                     chatId: chatId,
-                    text: Constants.MESSAGES[MessageToUser.UnknownError],
+                    text: Constants.MESSAGES[BotMessage.UnknownError],
                     cancellationToken: cancellationToken
                     );
             }
@@ -396,9 +396,9 @@ namespace BooruBot
                         {
                             return;
                         }
-                        user.AddChannel(new UserChannel(chat.Id, user.Id));
-                        user.CurrentGroupId = chat.Id;
-                        user.State = BotState.SetBooru;
+                        user.AddChat(new BotUserChat(chat.Id, user.Id));
+                        user.CurrentChatId = chat.Id;
+                        user.State = BotUserState.SetBooru;
                         await JsonWorker.UpdateUserAsync(user);
                         ReplyKeyboardMarkup booruReply = new(new[] { new KeyboardButton[] { "Gelbooru", "Danbooru" } })
                         {
@@ -421,7 +421,7 @@ namespace BooruBot
                             await JsonWorker.UpdateUserAsync(user);
                             return;
                         }
-                        user.RemoveChannelIfExist(chat.Id);
+                        user.RemoveChat(chat.Id);
                         bool isDeleted = await JsonWorker.UpdateUserAsync(user);
                         if (isDeleted)
                         {
@@ -465,7 +465,7 @@ namespace BooruBot
                         logger.Info("Поиск группы и удаление у пользователя, id которого телеграм не дал");
                         foreach (BotUser usr in users.Values)
                         {
-                            usr.RemoveChannelIfExist(chat.Id);
+                            usr.RemoveChat(chat.Id);
                         }
                         break;
                 }

@@ -4,9 +4,9 @@ namespace BooruBot
 {
     internal static class JsonWorker
     {
-        private static NLog.Logger logger = NLog.LogManager.GetLogger("JsonWorker");
+        private readonly static NLog.Logger logger = NLog.LogManager.GetLogger("JsonWorker");
 
-        private static JsonSerializerOptions options = new()
+        private readonly static JsonSerializerOptions options = new()
         {
             WriteIndented = true
         };

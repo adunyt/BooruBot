@@ -5,7 +5,7 @@ namespace BooruBot
 {
     static internal class ImageFinder
     {
-        async static public Task<(string, string, string[])> Abooru(ABooru booru, NLog.Logger logger, List<string>? tags = null, Rating rating = Rating.General)
+        async static public Task<(string, string, string[])> Random(ABooru booru, NLog.Logger logger, List<string>? tags = null, Rating rating = Rating.General)
         {
             logger.Info("Поиск случайного изображения на {booru}", booru.BaseUrl.Host);
             tags ??= new();
