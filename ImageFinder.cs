@@ -1,7 +1,7 @@
 ﻿using BooruSharp.Booru;
 using BooruSharp.Search.Post;
 
-namespace BooruBot.Image
+namespace BooruBot
 {
     static internal class ImageFinder
     {
@@ -36,9 +36,9 @@ namespace BooruBot.Image
                 "Post URL: {postUri}\tРейтинг: {rating}\tТеги: {tags}",
                 result.PostUrl.AbsoluteUri,
                 result.Rating.ToString(),
-                String.Join(", ", result.Tags));
+                string.Join(", ", result.Tags));
 
-            return (result.FileUrl?.AbsoluteUri ?? result.Source, result.PostUrl?.AbsoluteUri ?? result.Source, result.Tags.ToArray());
+            return (result.FileUrl?.AbsoluteUri ?? result.Source, result.PostUrl.AbsoluteUri, result.Tags.ToArray());
         }
     }
 }

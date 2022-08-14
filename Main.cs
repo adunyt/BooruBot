@@ -9,11 +9,11 @@ using Telegram.Bot.Types.Enums;
 #region LoggerInit
 var config = new NLog.Config.LoggingConfiguration();
 var logfile = new NLog.Targets.FileTarget("logfile") { FileName = $"logs/log-{DateTime.Now}.txt" };
-var logconsole = new NLog.Targets.ConsoleTarget("logconsole");
+var logconsole = new NLog.Targets.ConsoleTarget("logconsole") { Name = "Main"};
 config.AddRule(LogLevel.Debug, LogLevel.Fatal, logconsole);
 config.AddRule(LogLevel.Debug, LogLevel.Fatal, logfile);
 LogManager.Configuration = config;
-Logger logger = LogManager.GetCurrentClassLogger();
+Logger logger = LogManager.GetLogger("Main");
 logger.Debug("Иницилизация логгера - успешно");
 #endregion
 
@@ -108,56 +108,59 @@ void UpdateCommands(TelegramBotClient bot)
  + добавлять, а не перезаписывать json файл
  + add users to handler init
  + определение, что бота добавили в группу (MyChatMember)
- +- redirect arts from /random_image command to UserGroup
  + fix json init
  + catching new users
- * починить экстренную остановку (CancelKeyPress)
- * сообщение о сбоях (HandlePollingErrorAsync)
- * catch block from user
- * tags with /random_image
- * fix add in first time to channel
- * fix not member 
- * rename all groups to channel
- * rewrite usergroup and botuser
- ? jsonWorker return List<>
- - loli moment
+ + rewrite usergroup and botuser
+ + rename all groups to channel
+ + сообщение о сбоях (HandlePollingErrorAsync)
+ + add constans class
+ + tags with /random_image >>> group list
+ + loli moment
+ + починить экстренную остановку (CancelKeyPress)
+ +- fix add in first time to channel
+ + redirect arts from /random_image command to UserGroup
+ + fix json d bug, when data doesn't write properly >>> fix write to file method, because method override file line by line
+ + when setting ends set currentchannel to null
+ + add some logger to jsonworker
+ + catch block from user
+ + fix removing group when kicking by "channel" >>> with linq
+
+ * change list to dictonary
+ * support multiply channel
+ * choose where to send picture
+ * add rating setting
+ * add /setting command
+ * add /latest
+ * add /cancel
+ * make args with commands /random /latest
+ * send picture with tags 
+ * get more than 1 pictures
+ * add force setting when user start using bot and ordinary setting when user already using bot
+ * rewrite constants
+ * support video/gif
+ * rewrite funcs with Update? update
+
+ - jsonWorker return List<> >>> rewrited types
  - вынести вспомогательные методы в отдельный файл
 */
 
 #region BotInit
 var users = await JsonWorker.GetUsersAsync();
-var botClient = new TelegramBotClient("5473922129:AAG5oD6OqnVUfR18hNmPMx_U1-WulrYMy-8");
-var filter = new ReceiverOptions { AllowedUpdates = new UpdateType[2] { UpdateType.Message, UpdateType.MyChatMember }/*, ThrowPendingUpdates = true */};
-var router = new Router(logger);
-var handlers = new Handlers(router, botClient, users, logger);
-var listeners = new Listeners(router, logger);
+var botClient = new TelegramBotClient(Constants.BOT_TOKEN);
+var filter = new ReceiverOptions { AllowedUpdates = new UpdateType[] { UpdateType.Message, UpdateType.MyChatMember, UpdateType.CallbackQuery }/*, ThrowPendingUpdates = true */};
+var router = new Router(users);
+var handlers = new Handlers(router, botClient, users);
+var listeners = new Listeners(router);
 logger.Debug("Иницилизация бота - успешно");
 #endregion
 
 using var cancelSource = new CancellationTokenSource();
 
 bool shuttingDown = false;
-bool botRunning = false;
-Console.CancelKeyPress += (sender, e) =>
-{
-    shuttingDown = true;
-    if (botRunning)
-    {
-        logger.Info("Остановка приложения и бота...");
-        cancelSource.Cancel();
-        e.Cancel = true;
-    }
-    else
-    {
-        logger.Info("Остановка приложения...");
-        e.Cancel = false;
-    }
-};
 
 int unknownErrorCount = 0;
 while (!shuttingDown) // main cycle
 {
-    botRunning = false;
     Thread.Sleep(500); // some thread sleeping for except frequently repeated requests on errors
     int apiErrorCount = 0;
     var botCancelToken = cancelSource.Token;
@@ -195,7 +198,6 @@ while (!shuttingDown) // main cycle
         #endregion
 
         logger.Info("Запуск бота @{botName}. Чтобы остановить нажмите Ctrl+C", botClient.GetMeAsync().Result.Username);
-        botRunning = true;
         await botClient.ReceiveAsync(
             updateHandler: listeners.MainListener,
             errorHandler: handlers.HandlePollingErrorAsync,
