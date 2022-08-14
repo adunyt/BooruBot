@@ -124,8 +124,8 @@ void UpdateCommands(TelegramBotClient bot)
  + add some logger to jsonworker
  + catch block from user
  + fix removing group when kicking by "channel" >>> with linq
+ + change list to dictonary
 
- * change list to dictonary
  * support multiply channel
  * choose where to send picture
  * add rating setting

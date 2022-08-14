@@ -57,17 +57,17 @@ namespace BooruBot
         {
             SettingsHandler? settings = botUser.State switch
             {
-                BotState.SetMode or BotState.Start => settingsRoutes.GetValueOrDefault("mode"),
-                BotState.SetBooru => settingsRoutes.GetValueOrDefault("booru"),
-                BotState.SetTags => settingsRoutes.GetValueOrDefault("tags"),
-                BotState.SetBlacklist or BotState.SetPreferences => settingsRoutes.GetValueOrDefault("end"),
+                BotState.SetMode or BotState.Start => settingsRoutes["mode"],
+                BotState.SetBooru => settingsRoutes["booru"],
+                BotState.SetTags => settingsRoutes["tags"],
+                BotState.SetBlacklist or BotState.SetPreferences => settingsRoutes["end"],
                 _ => throw new Exception($"Невозможно выполнить направление сообщения настройки, когда пользователь не находится в настройках. Этап - {botUser.State}"),
             };
             try
             {
                 await settings(message, botUser, cancellationToken, update);
             }
-            catch (NullReferenceException e)
+            catch (KeyNotFoundException e)
             {
                 logger.Error(e, "Не определен handler для настройки {state}", botUser.State);
                 throw;

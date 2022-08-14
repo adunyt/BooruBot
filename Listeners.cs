@@ -7,7 +7,7 @@ namespace BooruBot
     internal class Listeners
     {
         private readonly NLog.Logger logger = NLog.LogManager.GetLogger("Listeners");
-        private Router router;
+        private readonly Router router;
         public Listeners(Router router)
         {
             this.router = router;
